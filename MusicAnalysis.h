@@ -14,7 +14,7 @@ class MusicAnalysis
         const std::function<void(float*, uint32_t, winrt::Windows::Foundation::TimeSpan)> func;
 
         AudioFrameOutputNodeContorller(winrt::Windows::Media::Audio::AudioFrameOutputNode const& node, std::function<void(float*, uint32_t, winrt::Windows::Foundation::TimeSpan)> action) : out_node(node), func(action) {};
-        const void QuantumStartedHandler(winrt::Windows::Foundation::TimeSpan ts);
+        const void QuantumStartedHandler();
     };
 
     const winrt::Windows::Media::Audio::AudioGraph audioGraph = [this]() {  /// オーディオグラフ

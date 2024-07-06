@@ -12,12 +12,10 @@ using namespace Windows::Media::MediaProperties;
 
 
 inline void MusicAnalysis::QuantumStartedHandler(winrt::Windows::Media::Audio::AudioGraph sender, winrt::Windows::Foundation::IInspectable args) {
-    TimeSpan ts = in_node.Position();
-    
     unsigned size = (unsigned int)out_nodes.size();
     for (unsigned i = 0; i < size; i++)
     {
-        out_nodes[i].QuantumStartedHandler(ts);
+        out_nodes[i].QuantumStartedHandler();
     }
 }
 
@@ -83,7 +81,7 @@ MusicAnalysis::~MusicAnalysis() {
     audioGraph.Close();
 }
 
-inline const void MusicAnalysis::AudioFrameOutputNodeContorller::QuantumStartedHandler(winrt::Windows::Foundation::TimeSpan ts) {
+inline const void MusicAnalysis::AudioFrameOutputNodeContorller::QuantumStartedHandler() {
     AudioFrame frame = out_node.GetFrame();
 
     AudioBuffer buffer = frame.LockBuffer(AudioBufferAccessMode::Read);
@@ -91,7 +89,7 @@ inline const void MusicAnalysis::AudioFrameOutputNodeContorller::QuantumStartedH
     uint32_t capacity = reference.Capacity() * sizeof(std::byte) / sizeof(float);
     float* data = reinterpret_cast<float*>(reference.data());
 
-    func(data, capacity, ts);
+    func(data, capacity, frame.RelativeTime().Value());
 
     reference.Close();
     buffer.Close();
