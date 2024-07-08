@@ -5,19 +5,13 @@
 
 #include <chrono>
 
-using namespace winrt::Windows::Foundation;
-using namespace winrt::Windows::Storage;
-using namespace winrt::Windows::Media;
-using namespace winrt::Windows::Media::Core;
-using namespace winrt::Windows::Media::Audio;
-using namespace winrt::Windows::Media::MediaProperties;
 
-IAsyncOperation<StorageFolder> getCurrentStorageFolder()
+winrt::Windows::Foundation::IAsyncOperation<winrt::Windows::Storage::StorageFolder> getCurrentStorageFolder()
 {
     std::unique_ptr<wchar_t[]> lpBuffer = std::make_unique<wchar_t[]>(MAX_PATH);
     GetCurrentDirectory(MAX_PATH, lpBuffer.get());
     // wprintf(L"%ls\n", lpBuffer.get());
-    return StorageFolder::GetFolderFromPathAsync(lpBuffer.get());
+    return winrt::Windows::Storage::StorageFolder::GetFolderFromPathAsync(lpBuffer.get());
 }
 
 void printTimeSpan(const winrt::Windows::Foundation::TimeSpan& ts)
@@ -36,6 +30,11 @@ void printTimeSpan(const winrt::Windows::Foundation::TimeSpan& ts)
 
 int wmain(int argc, wchar_t* argv[])
 {
+    using namespace winrt::Windows::Storage;
+    using namespace winrt::Windows::Media::Core;
+    using namespace winrt::Windows::Media::Audio;
+    using namespace winrt::Windows::Media::MediaProperties;
+
     // 初期化
     winrt::init_apartment();
 
@@ -83,7 +82,7 @@ int wmain(int argc, wchar_t* argv[])
     ep.ChannelCount(2);
     ep.SampleRate(30 * N);
 
-    ma.add_outnode([&l_pcm, &r_pcm](float* pcm, uint32_t capacity, TimeSpan ts) {
+    ma.add_outnode([&l_pcm, &r_pcm](float* pcm, uint32_t capacity, winrt::Windows::Foundation::TimeSpan ts) {
         uint32_t i = 0;
         while (i < capacity) {
             l_pcm.write(pcm[i]);

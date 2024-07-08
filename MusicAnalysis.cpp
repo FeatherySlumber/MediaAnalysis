@@ -1,13 +1,6 @@
 #include "pch.h"
 #include "MusicAnalysis.h"
 
-using namespace winrt::Windows::Storage;
-using namespace winrt::Windows::Foundation;
-using namespace winrt::Windows::Media;
-using namespace winrt::Windows::Media::Core;
-using namespace winrt::Windows::Media::Audio;
-using namespace winrt::Windows::Media::MediaProperties;
-
 inline void MusicAnalysis::QuantumStartedHandler(winrt::Windows::Media::Audio::AudioGraph sender, winrt::Windows::Foundation::IInspectable args) {
     unsigned size = (unsigned int)out_nodes.size();
     for (unsigned i = 0; i < size; i++)
@@ -17,6 +10,9 @@ inline void MusicAnalysis::QuantumStartedHandler(winrt::Windows::Media::Audio::A
 }
 
 MusicAnalysis::MusicAnalysis(winrt::Windows::Storage::StorageFile const& f) : file(f) {
+    using namespace winrt::Windows::Media::Audio;
+    using winrt::Windows::Media::Core::MediaSource;
+
     MediaSource source = MediaSource::CreateFromStorageFile(file);
     CreateMediaSourceAudioInputNodeResult result = audioGraph.CreateMediaSourceAudioInputNodeAsync(source).get();
     if (result.Status() != MediaSourceAudioInputNodeCreationStatus::Success)
@@ -29,7 +25,7 @@ MusicAnalysis::MusicAnalysis(winrt::Windows::Storage::StorageFile const& f) : fi
 winrt::Windows::Foundation::IAsyncAction MusicAnalysis::execute() {
 #if false    // ƒ|[ƒŠƒ“ƒO?
     bool flag = false;
-    in_node.MediaSourceCompleted([&flag](MediaSourceAudioInputNode, winrt::Windows::Foundation::IInspectable args) {
+    in_node.MediaSourceCompleted([&flag](winrt::Windows::Media::Audio::MediaSourceAudioInputNode, winrt::Windows::Foundation::IInspectable args) {
         flag = true;
     });
 
@@ -41,7 +37,7 @@ winrt::Windows::Foundation::IAsyncAction MusicAnalysis::execute() {
     }
 #else
     std::binary_semaphore flag(0);
-    in_node.MediaSourceCompleted([&flag](MediaSourceAudioInputNode, winrt::Windows::Foundation::IInspectable args) {
+    in_node.MediaSourceCompleted([&flag](winrt::Windows::Media::Audio::MediaSourceAudioInputNode, winrt::Windows::Foundation::IInspectable args) {
         flag.release();
     });
 
@@ -60,7 +56,7 @@ const winrt::Windows::Media::MediaProperties::AudioEncodingProperties MusicAnaly
 
 void MusicAnalysis::add_outnode(std::function<void(float*, uint32_t, winrt::Windows::Foundation::TimeSpan)> action, winrt::Windows::Media::MediaProperties::AudioEncodingProperties const& properties)
 {
-    AudioFrameOutputNode frameOutputNode = audioGraph.CreateFrameOutputNode(properties);
+    winrt::Windows::Media::Audio::AudioFrameOutputNode frameOutputNode = audioGraph.CreateFrameOutputNode(properties);
     frameOutputNode.ConsumeInput(true);
 
     out_nodes.emplace_back(frameOutputNode, action);
@@ -79,6 +75,9 @@ MusicAnalysis::~MusicAnalysis() {
 }
 
 inline const void MusicAnalysis::AudioFrameOutputNodeContorller::QuantumStartedHandler() {
+    using namespace winrt::Windows::Media;
+    using winrt::Windows::Foundation::IMemoryBufferReference;
+
     AudioFrame frame = out_node.GetFrame();
 
     AudioBuffer buffer = frame.LockBuffer(AudioBufferAccessMode::Read);
