@@ -19,7 +19,7 @@ IAsyncOperation<StorageFolder> getCurrentStorageFolder()
 {
     unique_ptr<wchar_t[]> lpBuffer = make_unique<wchar_t[]>(MAX_PATH);
     GetCurrentDirectory(MAX_PATH, lpBuffer.get());
-    wprintf(L"%ls\n", lpBuffer.get());
+    // wprintf(L"%ls\n", lpBuffer.get());
     return StorageFolder::GetFolderFromPathAsync(lpBuffer.get());
 }
 
@@ -44,15 +44,12 @@ int wmain(int argc, wchar_t* argv[])
 
     // ファイル取得
     StorageFolder folder = getCurrentStorageFolder().get();
-#if false // test
+#if true // test
     StorageFile r = folder.GetFileAsync(L"test.mp3").get();
 #else
-    wcout << argc << endl;
-    for (int i = 0; i < argc; i++) wcout << argv[i] << '/' << flush;
     StorageFile r{ nullptr };
     if (argc >= 2) {
         r = folder.GetFileAsync(argv[1]).get();
-        wcout << r.Name().c_str() << endl;
     }
     else {
         wcerr << "Not enough arguments. Specify a relative path." << endl;
@@ -69,14 +66,18 @@ int wmain(int argc, wchar_t* argv[])
     
     // 出力先に関する初期化
     ofstream lStream((r.Name() + L"_fft_L.tmp").c_str(), ios::trunc | ios::binary);
-    MemoryUtil<float> l_pcm = MemoryUtil<float>(1024, [&lStream, &executor, &l_result](float *pcm) {
+    float lmax = 0; // 検証用
+    MemoryUtil<float> l_pcm = MemoryUtil<float>(1024, [&lStream, &executor, &l_result, &lmax](float *pcm) {
         executor.FFT(pcm, l_result.get());
         lStream.write((char*)l_result.get(), sizeof(float) * 1024);
+        for(int i = 0; i < 1024; i++) if (l_result[i] > lmax) lmax = l_result[i];
     });    
     ofstream rStream((r.Name() + L"_fft_R.tmp").c_str(), ios::trunc | ios::binary);
-    MemoryUtil<float> r_pcm = MemoryUtil<float>(1024, [&rStream, &executor, &r_result](float* pcm) {
+    float rmax = 0;
+    MemoryUtil<float> r_pcm = MemoryUtil<float>(1024, [&rStream, &executor, &r_result, &rmax](float* pcm) {
         executor.FFT(pcm, r_result.get());
         rStream.write((char*)r_result.get(), sizeof(float) * 1024);
+        for (int i = 0; i < 1024; i++) if (r_result[i] > rmax) rmax = r_result[i];
     });
 
     // 処理の作成
@@ -94,10 +95,6 @@ int wmain(int argc, wchar_t* argv[])
             i++;
         }
         printTimeSpan(ts);
-        /*
-        count += capacity;
-        wcout << count << endl;
-        */
     }, ep);
 
     // 実行
@@ -107,6 +104,8 @@ int wmain(int argc, wchar_t* argv[])
 
     lStream.close();
     rStream.close();
+
+    wcout << endl << "Max FFT Value:" << (lmax > rmax ? lmax : rmax) << endl;
 
     return 0;
 }
