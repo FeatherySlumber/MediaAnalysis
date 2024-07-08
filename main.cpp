@@ -5,19 +5,16 @@
 
 #include <chrono>
 
-using namespace std;
-using namespace winrt;
-using namespace Windows::Foundation;
-using namespace Windows::Storage;
-using namespace Windows::Media;
-using namespace Windows::Media::Core;
-using namespace Windows::Media::Audio;
-using namespace Windows::Media::MediaProperties;
-
+using namespace winrt::Windows::Foundation;
+using namespace winrt::Windows::Storage;
+using namespace winrt::Windows::Media;
+using namespace winrt::Windows::Media::Core;
+using namespace winrt::Windows::Media::Audio;
+using namespace winrt::Windows::Media::MediaProperties;
 
 IAsyncOperation<StorageFolder> getCurrentStorageFolder()
 {
-    unique_ptr<wchar_t[]> lpBuffer = make_unique<wchar_t[]>(MAX_PATH);
+    std::unique_ptr<wchar_t[]> lpBuffer = std::make_unique<wchar_t[]>(MAX_PATH);
     GetCurrentDirectory(MAX_PATH, lpBuffer.get());
     // wprintf(L"%ls\n", lpBuffer.get());
     return StorageFolder::GetFolderFromPathAsync(lpBuffer.get());
@@ -25,27 +22,27 @@ IAsyncOperation<StorageFolder> getCurrentStorageFolder()
 
 void printTimeSpan(const winrt::Windows::Foundation::TimeSpan& ts)
 {
-    int64_t totalMilliseconds = chrono::duration_cast<chrono::milliseconds>(ts).count();
+    int64_t totalMilliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(ts).count();
 
     int minutes = static_cast<int>(totalMilliseconds / 60000);  // 60 * 1000
     int seconds = static_cast<int>((totalMilliseconds % 60000) / 1000);
     int milliseconds = static_cast<int>(totalMilliseconds % 1000);
 
-    wcout << std::setw(2) << std::setfill(L'0') << minutes << ":"
+    std::wcout << std::setw(2) << std::setfill(L'0') << minutes << ":"
         << std::setw(2) << std::setfill(L'0') << seconds << "."
         << std::setw(3) << std::setfill(L'0') << milliseconds
-        << '\r' << flush;
+        << '\r' << std::flush;
 }
 
 int wmain(int argc, wchar_t* argv[])
 {
     // 初期化
-    init_apartment();
+    winrt::init_apartment();
 
     // ファイル取得
     StorageFolder folder = getCurrentStorageFolder().get();
 #if true // test
-    StorageFile r = folder.GetFileAsync(L"test.mp3").get();
+    StorageFile r = folder.GetFileAsync(L"test.wav").get();
 #else
     StorageFile r{ nullptr };
     if (argc >= 2) {
@@ -60,19 +57,19 @@ int wmain(int argc, wchar_t* argv[])
     // FFT関連の初期化
     int N = 1024;
     FFTExecutor<float> executor(N);
-    unique_ptr<float[]> l_result = make_unique<float[]>(N);
-    unique_ptr<float[]> r_result = make_unique<float[]>(N);
+    std::unique_ptr<float[]> l_result = std::make_unique<float[]>(N);
+    std::unique_ptr<float[]> r_result = std::make_unique<float[]>(N);
 
     
     // 出力先に関する初期化
-    ofstream lStream((r.Name() + L"_fft_L.tmp").c_str(), ios::trunc | ios::binary);
+    std::ofstream lStream((r.Name() + L"_fft_L.tmp").c_str(), std::ios::trunc | std::ios::binary);
     float lmax = 0; // 検証用
     MemoryUtil<float> l_pcm = MemoryUtil<float>(1024, [&lStream, &executor, &l_result, &lmax](float *pcm) {
         executor.FFT(pcm, l_result.get());
         lStream.write((char*)l_result.get(), sizeof(float) * 1024);
         for(int i = 0; i < 1024; i++) if (l_result[i] > lmax) lmax = l_result[i];
     });    
-    ofstream rStream((r.Name() + L"_fft_R.tmp").c_str(), ios::trunc | ios::binary);
+    std::ofstream rStream((r.Name() + L"_fft_R.tmp").c_str(), std::ios::trunc | std::ios::binary);
     float rmax = 0;
     MemoryUtil<float> r_pcm = MemoryUtil<float>(1024, [&rStream, &executor, &r_result, &rmax](float* pcm) {
         executor.FFT(pcm, r_result.get());
@@ -105,7 +102,7 @@ int wmain(int argc, wchar_t* argv[])
     lStream.close();
     rStream.close();
 
-    wcout << endl << "Max FFT Value:" << (lmax > rmax ? lmax : rmax) << endl;
+    std::wcout << std::endl << "Max FFT Value:" << (lmax > rmax ? lmax : rmax) << std::endl;
 
     return 0;
 }

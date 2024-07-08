@@ -1,15 +1,12 @@
 #include "pch.h"
 #include "MusicAnalysis.h"
 
-using namespace std;
-using namespace winrt;
-using namespace Windows::Storage;
-using namespace Windows::Foundation;
-using namespace Windows::Media;
-using namespace Windows::Media::Core;
-using namespace Windows::Media::Audio;
-using namespace Windows::Media::MediaProperties;
-
+using namespace winrt::Windows::Storage;
+using namespace winrt::Windows::Foundation;
+using namespace winrt::Windows::Media;
+using namespace winrt::Windows::Media::Core;
+using namespace winrt::Windows::Media::Audio;
+using namespace winrt::Windows::Media::MediaProperties;
 
 inline void MusicAnalysis::QuantumStartedHandler(winrt::Windows::Media::Audio::AudioGraph sender, winrt::Windows::Foundation::IInspectable args) {
     unsigned size = (unsigned int)out_nodes.size();
@@ -43,7 +40,7 @@ winrt::Windows::Foundation::IAsyncAction MusicAnalysis::execute() {
         __nop();
     }
 #else
-    binary_semaphore flag(0);
+    std::binary_semaphore flag(0);
     in_node.MediaSourceCompleted([&flag](MediaSourceAudioInputNode, winrt::Windows::Foundation::IInspectable args) {
         flag.release();
     });
