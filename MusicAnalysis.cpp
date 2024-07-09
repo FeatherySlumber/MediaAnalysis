@@ -43,6 +43,7 @@ winrt::Windows::Foundation::IAsyncAction MusicAnalysis::execute() {
 
     audioGraph.Start();
 
+    co_await winrt::resume_background();
     flag.acquire();
 #endif
     audioGraph.Stop();
