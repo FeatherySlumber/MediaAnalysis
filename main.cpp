@@ -28,6 +28,9 @@ void printTimeSpan(const winrt::Windows::Foundation::TimeSpan& ts)
         << '\r' << std::flush;
 }
 
+constexpr int FFT_N = 1024;
+constexpr int BPM_N = 512;
+
 int wmain(int argc, wchar_t* argv[])
 {
     using namespace winrt::Windows::Storage;
@@ -54,33 +57,32 @@ int wmain(int argc, wchar_t* argv[])
 #endif
 
     // FFT関連の初期化
-    int N = 1024;
-    FFTExecutor<float> executor(N);
-    std::unique_ptr<float[]> l_result = std::make_unique<float[]>(N);
-    std::unique_ptr<float[]> r_result = std::make_unique<float[]>(N);
+    FFTExecutor<float> executor(FFT_N);
+    std::unique_ptr<float[]> l_result = std::make_unique<float[]>(FFT_N);
+    std::unique_ptr<float[]> r_result = std::make_unique<float[]>(FFT_N);
 
     
     // 出力先に関する初期化
     std::ofstream lStream((r.Name() + L"_fft_L.tmp").c_str(), std::ios::trunc | std::ios::binary);
     float lmax = 0; // 検証用
-    MemoryUtil<float> l_pcm = MemoryUtil<float>(1024, [&lStream, &executor, &l_result, &lmax](float *pcm) {
+    MemoryUtil<float> l_pcm = MemoryUtil<float>(FFT_N, [&lStream, &executor, &l_result, &lmax](float *pcm) {
         executor.FFT(pcm, l_result.get());
-        lStream.write((char*)l_result.get(), sizeof(float) * 1024);
-        for(int i = 0; i < 1024; i++) if (l_result[i] > lmax) lmax = l_result[i];
+        lStream.write((char*)l_result.get(), sizeof(float) * FFT_N);
+        for(int i = 0; i < FFT_N; i++) if (l_result[i] > lmax) lmax = l_result[i];
     });    
     std::ofstream rStream((r.Name() + L"_fft_R.tmp").c_str(), std::ios::trunc | std::ios::binary);
     float rmax = 0;
-    MemoryUtil<float> r_pcm = MemoryUtil<float>(1024, [&rStream, &executor, &r_result, &rmax](float* pcm) {
+    MemoryUtil<float> r_pcm = MemoryUtil<float>(FFT_N, [&rStream, &executor, &r_result, &rmax](float* pcm) {
         executor.FFT(pcm, r_result.get());
-        rStream.write((char*)r_result.get(), sizeof(float) * 1024);
-        for (int i = 0; i < 1024; i++) if (r_result[i] > rmax) rmax = r_result[i];
+        rStream.write((char*)r_result.get(), sizeof(float) * FFT_N);
+        for (int i = 0; i < FFT_N; i++) if (r_result[i] > rmax) rmax = r_result[i];
     });
 
     // 処理の作成
     MusicAnalysis ma(r);
     AudioEncodingProperties ep = ma.get_graph_properties();
     ep.ChannelCount(2);
-    ep.SampleRate(30 * N);
+    ep.SampleRate(30 * FFT_N);
 
     ma.add_outnode([&l_pcm, &r_pcm](float* pcm, uint32_t capacity, winrt::Windows::Foundation::TimeSpan ts) {
         uint32_t i = 0;
@@ -90,13 +92,64 @@ int wmain(int argc, wchar_t* argv[])
             r_pcm.write(pcm[i]);
             i++;
         }
-        printTimeSpan(ts);
+        // printTimeSpan(ts);
     }, ep);
+
+    AudioEncodingProperties aep = ma.get_graph_properties();
+    aep.ChannelCount(1);
+    aep.SampleRate(30 * FFT_N);
+
+    // std::ofstream tStream((r.Name() + L"_tempo.tmp").c_str(), std::ios::trunc | std::ios::binary);
+    std::ofstream vStream((r.Name() + L"_volume.tmp").c_str(), std::ios::trunc | std::ios::binary);
+    
+    FFTExecutor<float> bpm_fft(BPM_N);
+    std::unique_ptr<float[]> b_result = std::make_unique<float[]>(BPM_N);
+    MemoryUtil<float> bpm_m = MemoryUtil<float>(BPM_N, [&vStream, &bpm_fft, &b_result](float* pcm) {
+        vStream.write((char*)pcm, sizeof(float) * BPM_N);
+        for (uint32_t i = BPM_N -1; i > 0; --i) {
+            auto temp = pcm[i] - pcm[i - 1];
+            if (temp > 0) {
+                pcm[i] = temp;
+            }
+            else {
+                pcm[i] = 0;
+            }
+        }
+        bpm_fft.FFT(pcm, b_result.get());
+        int idx = 0;
+        float max = 0;
+        for (int i = 1; i < BPM_N; ++i) {
+            if (max < b_result[i]) {
+                max = b_result[i];
+                idx = i;
+                std::cout << i << std::endl;
+            }
+
+            std::cout << b_result[i] << std::endl;
+        }
+        std::cout << "idx:" << idx << ", value:" << max << std::endl;
+    });
+    std::unique_ptr<float[]> v_result = std::make_unique<float[]>(FFT_N);
+    MemoryUtil<float> t_pcm = MemoryUtil<float>(FFT_N, [&bpm_m, &executor, &v_result](float* pcm) {
+        float sum = 0;
+        executor.FFT(pcm, v_result.get());
+        for (uint32_t i = 0; i < FFT_N; ++i) {
+            sum += v_result[i];
+        }
+        bpm_m.write(sum);
+    });
+    ma.add_outnode([&t_pcm](float* pcm, uint32_t capacity, winrt::Windows::Foundation::TimeSpan ts) {
+        for (uint32_t i = 0; i < capacity; ++i) {
+            t_pcm.write(pcm[i]);
+        }
+    }, aep);
 
     // 実行
     ma.execute().get();
     l_pcm.wait_all_processes_end().get();
     r_pcm.wait_all_processes_end().get();
+    bpm_m.wait_all_processes_end().get();
+    t_pcm.wait_all_processes_end().get();
 
     lStream.close();
     rStream.close();
