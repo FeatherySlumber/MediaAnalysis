@@ -92,7 +92,7 @@ int wmain(int argc, wchar_t* argv[])
             r_pcm.write(pcm[i]);
             i++;
         }
-        // printTimeSpan(ts);
+        printTimeSpan(ts);
     }, ep);
 
     AudioEncodingProperties aep = ma.get_graph_properties();
@@ -104,9 +104,10 @@ int wmain(int argc, wchar_t* argv[])
     
     FFTExecutor<float> bpm_fft(BPM_N);
     std::unique_ptr<float[]> b_result = std::make_unique<float[]>(BPM_N);
-    MemoryUtil<float> bpm_m = MemoryUtil<float>(BPM_N, [&vStream, &bpm_fft, &b_result](float* pcm) {
+    Container<float> vol_mem(BPM_N);
+    auto bpm_func = [&vStream, &bpm_fft, &b_result](float* pcm) {
         vStream.write((char*)pcm, sizeof(float) * BPM_N);
-        for (uint32_t i = BPM_N -1; i > 0; --i) {
+        for (uint32_t i = BPM_N - 1; i > 0; --i) {
             auto temp = pcm[i] - pcm[i - 1];
             if (temp > 0) {
                 pcm[i] = temp;
@@ -122,21 +123,23 @@ int wmain(int argc, wchar_t* argv[])
             if (max < b_result[i]) {
                 max = b_result[i];
                 idx = i;
-                std::cout << i << std::endl;
             }
 
-            std::cout << b_result[i] << std::endl;
+           // std::cout << b_result[i] << std::endl;
         }
         std::cout << "idx:" << idx << ", value:" << max << std::endl;
-    });
+    };
     std::unique_ptr<float[]> v_result = std::make_unique<float[]>(FFT_N);
-    MemoryUtil<float> t_pcm = MemoryUtil<float>(FFT_N, [&bpm_m, &executor, &v_result](float* pcm) {
+    MemoryUtil<float> t_pcm = MemoryUtil<float>(FFT_N, [&vol_mem, &bpm_func, &executor, &v_result](float* pcm) {
         float sum = 0;
         executor.FFT(pcm, v_result.get());
         for (uint32_t i = 0; i < FFT_N; ++i) {
             sum += v_result[i];
         }
-        bpm_m.write(sum);
+        vol_mem.write(sum);
+        if (vol_mem.is_max()) {
+            vol_mem.Process(bpm_func).get();
+        }
     });
     ma.add_outnode([&t_pcm](float* pcm, uint32_t capacity, winrt::Windows::Foundation::TimeSpan ts) {
         for (uint32_t i = 0; i < capacity; ++i) {
@@ -148,7 +151,6 @@ int wmain(int argc, wchar_t* argv[])
     ma.execute().get();
     l_pcm.wait_all_processes_end().get();
     r_pcm.wait_all_processes_end().get();
-    bpm_m.wait_all_processes_end().get();
     t_pcm.wait_all_processes_end().get();
 
     lStream.close();
