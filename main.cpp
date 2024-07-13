@@ -45,7 +45,7 @@ int wmain(int argc, wchar_t* argv[])
     // ファイル取得
     StorageFolder folder = getCurrentStorageFolder().get();
 #if true // test
-    StorageFile r = folder.GetFileAsync(L"test.mp3").get();
+    StorageFile r = folder.GetFileAsync(L"120.mp3").get();
 #else
     StorageFile r{ nullptr };
     if (argc >= 2) {
@@ -118,11 +118,20 @@ int wmain(int argc, wchar_t* argv[])
     FFTExecutor<float> bpmFFT(bpmFFTSize);
     MemoryUtil<float> t_pcm = MemoryUtil<float>(bpmFFTSize, [&vol_mem, &bpm_func, &bpmFFT, &v_result](float* pcm) {
         float sum = 0;
+#if true
         bpmFFT.FFT(pcm, v_result.get());
         for (uint32_t i = 0; i < bpmFFTSize; ++i) {
-            sum += v_result[i];
+            sum += v_result[i] * v_result[i];
         }
-        vol_mem.write(sum);
+        float vol = std::sqrt(sum / bpmFFTSize);
+#else 
+        // 実行値
+        for (uint32_t i = 0; i < bpmFFTSize; ++i) {
+            sum += pcm[i] * pcm[i];
+        }
+        float vol = std::sqrt(sum / bpmFFTSize);
+#endif
+        vol_mem.write(vol);
         if (vol_mem.is_max()) {
             vol_mem.Process(bpm_func).get();
         }
