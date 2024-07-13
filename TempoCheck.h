@@ -8,7 +8,7 @@ class TempoCheck
 		return han_windows[value < (N >> 1) ? value : N - value];
 	}
 
-	void to_cut_under_volume(T* volume) {
+	void to_volume_diff(T* volume) {
 		for (int n = N - 1; n > 0; --n) {
 			auto temp = volume[n] - volume[n - 1];
 			if (temp > 0) {
@@ -32,8 +32,8 @@ public:
 	}
 
 	template <std::size_t S>
-	std::array<uint32_t, S> get_BPM(T* wave, uint32_t lower, uint32_t upper) {
-		to_cut_under_volume(wave);
+	std::array<uint32_t, S> get_BPM(T* volume, uint32_t lower, uint32_t upper) {
+		to_volume_diff(volume);
 
 		std::map<T, int> max;
 		T b_result = 0;
@@ -42,8 +42,8 @@ public:
 			T sum1 = 0, sum2 = 0;
 			T b = T(i) / lower;
 			for (uint32_t n = 0; n < N; ++n) {
-				sum1 += wave[n] * std::cos(T(2.0) * std::numbers::pi_v<T> * b * n / frame_sample_rate) * get_han_window(n);
-				sum2 += wave[n] * std::sin(T(2.0) * std::numbers::pi_v<T> * b * n / frame_sample_rate) * get_han_window(n);
+				sum1 += volume[n] * std::cos(T(2.0) * std::numbers::pi_v<T> * b * n / frame_sample_rate) * get_han_window(n);
+				sum2 += volume[n] * std::sin(T(2.0) * std::numbers::pi_v<T> * b * n / frame_sample_rate) * get_han_window(n);
 			}
 			T avg1 = sum1 / N;
 			T avg2 = sum2 / N;
@@ -56,8 +56,6 @@ public:
 			}
 			b_result = result;
 			b_slope = slope;
-
-			std::wcout << result;
 		}
 
 		std::array<uint32_t, S> arr{};
