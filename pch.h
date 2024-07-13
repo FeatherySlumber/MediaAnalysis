@@ -9,6 +9,7 @@
 #include <winrt/Windows.Storage.h>
 #include <winrt/Windows.Media.Core.h>
 #include <winrt/Windows.Media.Audio.h>
+#include <winrt/Windows.Media.Render.h>
 #include <winrt/Windows.Media.MediaProperties.h>
 
 /* windows関連 */

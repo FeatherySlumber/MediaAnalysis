@@ -2,6 +2,7 @@
 #include "FFTExecutor.h"
 #include "MusicAnalysis.h"
 #include "MemoryUtil.h"
+#include "TempoCheck.h"
 
 #include <chrono>
 
@@ -29,7 +30,7 @@ void printTimeSpan(const winrt::Windows::Foundation::TimeSpan& ts)
 }
 
 constexpr int FFT_N = 1024;
-constexpr int BPM_N = 512;
+constexpr int BPM_N = 480;
 
 int wmain(int argc, wchar_t* argv[])
 {
@@ -44,7 +45,7 @@ int wmain(int argc, wchar_t* argv[])
     // ファイル取得
     StorageFolder folder = getCurrentStorageFolder().get();
 #if true // test
-    StorageFile r = folder.GetFileAsync(L"test.wav").get();
+    StorageFile r = folder.GetFileAsync(L"test.mp3").get();
 #else
     StorageFile r{ nullptr };
     if (argc >= 2) {
@@ -92,7 +93,7 @@ int wmain(int argc, wchar_t* argv[])
             r_pcm.write(pcm[i]);
             i++;
         }
-        printTimeSpan(ts);
+        // printTimeSpan(ts);
     }, ep);
 
     AudioEncodingProperties aep = ma.get_graph_properties();
@@ -102,32 +103,14 @@ int wmain(int argc, wchar_t* argv[])
     // std::ofstream tStream((r.Name() + L"_tempo.tmp").c_str(), std::ios::trunc | std::ios::binary);
     std::ofstream vStream((r.Name() + L"_volume.tmp").c_str(), std::ios::trunc | std::ios::binary);
     
-    FFTExecutor<float> bpm_fft(BPM_N);
     std::unique_ptr<float[]> b_result = std::make_unique<float[]>(BPM_N);
     Container<float> vol_mem(BPM_N);
-    auto bpm_func = [&vStream, &bpm_fft, &b_result](float* pcm) {
+    TempoCheck<float> tempo(BPM_N, FFT_N, 30 * FFT_N);
+    auto bpm_func = [&vStream, &tempo, &b_result](float* pcm) {
         vStream.write((char*)pcm, sizeof(float) * BPM_N);
-        for (uint32_t i = BPM_N - 1; i > 0; --i) {
-            auto temp = pcm[i] - pcm[i - 1];
-            if (temp > 0) {
-                pcm[i] = temp;
-            }
-            else {
-                pcm[i] = 0;
-            }
-        }
-        bpm_fft.FFT(pcm, b_result.get());
-        int idx = 0;
-        float max = 0;
-        for (int i = 1; i < BPM_N; ++i) {
-            if (max < b_result[i]) {
-                max = b_result[i];
-                idx = i;
-            }
-
-           // std::cout << b_result[i] << std::endl;
-        }
-        std::cout << "idx:" << idx << ", value:" << max << std::endl;
+        
+        int bpm = tempo.get_BPM(pcm, 60, 270);
+        std::wcout << "bpm:" << bpm << std::endl;
     };
     std::unique_ptr<float[]> v_result = std::make_unique<float[]>(FFT_N);
     MemoryUtil<float> t_pcm = MemoryUtil<float>(FFT_N, [&vol_mem, &bpm_func, &executor, &v_result](float* pcm) {

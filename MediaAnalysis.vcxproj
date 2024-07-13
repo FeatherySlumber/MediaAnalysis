@@ -107,6 +107,7 @@
     <ClInclude Include="MemoryUtil.h" />
     <ClInclude Include="MusicAnalysis.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="TempoCheck.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FFTExecutor.cpp" />
@@ -116,6 +117,7 @@
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="TempoCheck.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
