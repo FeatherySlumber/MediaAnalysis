@@ -103,20 +103,23 @@ int wmain(int argc, wchar_t* argv[])
     // std::ofstream tStream((r.Name() + L"_tempo.tmp").c_str(), std::ios::trunc | std::ios::binary);
     std::ofstream vStream((r.Name() + L"_volume.tmp").c_str(), std::ios::trunc | std::ios::binary);
     
+
+    constexpr int bpmFFTSize = 512;
     std::unique_ptr<float[]> b_result = std::make_unique<float[]>(BPM_N);
     Container<float> vol_mem(BPM_N);
-    TempoCheck<float> tempo(BPM_N, FFT_N, 30 * FFT_N);
+    TempoCheck<float> tempo(BPM_N, bpmFFTSize, 30 * FFT_N);
     auto bpm_func = [&vStream, &tempo, &b_result](float* pcm) {
         vStream.write((char*)pcm, sizeof(float) * BPM_N);
         
-        int bpm = tempo.get_BPM(pcm, 60, 270);
-        std::wcout << "bpm:" << bpm << std::endl;
+        auto [bpm1, bpm2] = tempo.get_BPM<2>(pcm, 60, 270);
+        std::wcout << "bpm:" << bpm1 << ',' << bpm2 << std::endl;
     };
-    std::unique_ptr<float[]> v_result = std::make_unique<float[]>(FFT_N);
-    MemoryUtil<float> t_pcm = MemoryUtil<float>(FFT_N, [&vol_mem, &bpm_func, &executor, &v_result](float* pcm) {
+    std::unique_ptr<float[]> v_result = std::make_unique<float[]>(bpmFFTSize);
+    FFTExecutor<float> bpmFFT(bpmFFTSize);
+    MemoryUtil<float> t_pcm = MemoryUtil<float>(bpmFFTSize, [&vol_mem, &bpm_func, &bpmFFT, &v_result](float* pcm) {
         float sum = 0;
-        executor.FFT(pcm, v_result.get());
-        for (uint32_t i = 0; i < FFT_N; ++i) {
+        bpmFFT.FFT(pcm, v_result.get());
+        for (uint32_t i = 0; i < bpmFFTSize; ++i) {
             sum += v_result[i];
         }
         vol_mem.write(sum);
