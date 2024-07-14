@@ -32,6 +32,7 @@ void printTimeSpan(const winrt::Windows::Foundation::TimeSpan& ts)
 constexpr int FFT_N = 1024;
 constexpr int BPMDataSize = 480;
 constexpr int BPMFFT_N = 512;
+constexpr int BPMOutputCount = 3;
 constexpr int DisplayFrameRate = 30;
 
 int wmain(int argc, wchar_t* argv[])
@@ -51,10 +52,10 @@ int wmain(int argc, wchar_t* argv[])
 #else
     StorageFile r{ nullptr };
     if (argc >= 2) {
-        r = folder.GetFileAsync(argv[1]).get();
+        r = StorageFile::GetFileFromPathAsync(argv[1]).get();
     }
     else {
-        std::wcerr << "Not enough arguments. Specify a relative path." << endl;
+        std::wcerr << "Not enough arguments. Specify a path." << endl;
         return 1;
     }
 #endif
@@ -72,7 +73,7 @@ int wmain(int argc, wchar_t* argv[])
     float lmax = 0; // 検証用
     MemoryUtil<float> l_pcm = MemoryUtil<float>(FFT_N, [&lStream, &executor, &l_result, &lmax](float *pcm) {
         executor.FFT(pcm, l_result.get());
-        lStream.write((char*)l_result.get(), sizeof(float) * FFT_N);
+        lStream.write(reinterpret_cast<const char*>(l_result.get()), sizeof(float) * FFT_N);
         for(int i = 0; i < FFT_N; i++) if (l_result[i] > lmax) lmax = l_result[i];
     }); 
     // Rチャンネル
@@ -80,7 +81,7 @@ int wmain(int argc, wchar_t* argv[])
     float rmax = 0;
     MemoryUtil<float> r_pcm = MemoryUtil<float>(FFT_N, [&rStream, &executor, &r_result, &rmax](float* pcm) {
         executor.FFT(pcm, r_result.get());
-        rStream.write((char*)r_result.get(), sizeof(float) * FFT_N);
+        rStream.write(reinterpret_cast<const char*>(r_result.get()), sizeof(float) * FFT_N);
         for (int i = 0; i < FFT_N; i++) if (r_result[i] > rmax) rmax = r_result[i];
     });
 
@@ -105,7 +106,7 @@ int wmain(int argc, wchar_t* argv[])
 
 #pragma region /****** BPMと音量を出力する準備 ここから *******/
 
-    // std::ofstream tStream((r.Name() + L"_tempo.tmp").c_str(), std::ios::trunc | std::ios::binary);
+    std::ofstream tStream((r.Name() + L"_tempo.tmp").c_str(), std::ios::trunc | std::ios::binary);
     std::ofstream vStream((r.Name() + L"_volume.tmp").c_str(), std::ios::trunc | std::ios::binary);
     
 
@@ -115,11 +116,11 @@ int wmain(int argc, wchar_t* argv[])
     TempoCheck<float> tempo(BPMDataSize, BPMFFT_N, DisplayFrameRate * FFT_N);
     Container<float> vol_mem(BPMDataSize);  // BPMの取得、出力用バッファ
 
-    auto bpm_func = [&vStream, &tempo](float* pcm) {  // BPMの取得、出力用関数
-        vStream.write((char*)pcm, sizeof(float) * BPMDataSize);
+    auto bpm_func = [&vStream, &tStream, &tempo](float* pcm) {  // BPMの取得、出力用関数
+        vStream.write(reinterpret_cast<const char*>(pcm), sizeof(float) * BPMDataSize);
         
-        auto [bpm1, bpm2] = tempo.get_BPM<2>(pcm, 60, 270);
-        std::wcout << "bpm:" << bpm1 << ',' << bpm2 << std::endl;
+        std::array<unsigned int, BPMOutputCount> bpms = tempo.get_BPM<BPMOutputCount>(pcm, 60, 270);
+        tStream.write(reinterpret_cast<const char*>(bpms.data()), sizeof(unsigned int) * BPMOutputCount);
     };
     std::unique_ptr<float[]> bpmFFT_result = std::make_unique<float[]>(BPMFFT_N);
     FFTExecutor<float> bpmFFT(BPMFFT_N);
@@ -169,6 +170,8 @@ int wmain(int argc, wchar_t* argv[])
 
     lStream.close();
     rStream.close();
+    vStream.close();
+    tStream.close();
 
     std::wcout << std::endl << "Max FFT Value:" << (lmax > rmax ? lmax : rmax) << std::endl;
 
