@@ -5,6 +5,7 @@
 #include "TempoCheck.h"
 
 #include <chrono>
+#include <ratio>
 
 
 winrt::Windows::Foundation::IAsyncOperation<winrt::Windows::Storage::StorageFolder> getCurrentStorageFolder()
@@ -27,6 +28,24 @@ void printTimeSpan(const winrt::Windows::Foundation::TimeSpan& ts)
         << std::setw(2) << std::setfill(L'0') << seconds << "."
         << std::setw(3) << std::setfill(L'0') << milliseconds
         << '\r' << std::flush;
+}
+
+static void printChangeTimeSpan(const winrt::Windows::Foundation::TimeSpan& ts)
+{
+    static int64_t before = 0;
+    int64_t count = std::chrono::duration_cast<std::chrono::duration<int_fast64_t, std::deci>>(ts).count();
+    if (count != before) {
+        before = count;
+
+        int minutes = static_cast<int>(count / 600);  // 60 * 10
+        int seconds = static_cast<int>((count % 60) / 10);
+        int deciseconds = static_cast<int>(count % 10);
+
+        std::wcout << std::setw(2) << std::setfill(L'0') << minutes << ":"
+            << std::setw(2) << std::setfill(L'0') << seconds << '.'
+            << deciseconds
+            << '\r' << std::flush;
+    }
 }
 
 constexpr int FFT_N = 1024;
@@ -105,7 +124,6 @@ int wmain(int argc, wchar_t* argv[])
 #pragma endregion
 
 #pragma region /****** BPMと音量を出力する準備 ここから *******/
-
     std::ofstream tStream((r.Name() + L"_tempo.tmp").c_str(), std::ios::trunc | std::ios::binary);
     std::ofstream vStream((r.Name() + L"_volume.tmp").c_str(), std::ios::trunc | std::ios::binary);
     
@@ -157,7 +175,7 @@ int wmain(int argc, wchar_t* argv[])
         for (uint32_t i = 0; i < capacity; ++i) {
             t_pcm.write(pcm[i]);
         }
-        printTimeSpan(ts);  // 処理進捗の表示
+        printChangeTimeSpan(ts);  // 処理進捗の表示
     }, bpm_aep);
     /****** BPMと音量を出力する準備 ここまで *******/
 #pragma endregion
