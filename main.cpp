@@ -30,7 +30,9 @@ void printTimeSpan(const winrt::Windows::Foundation::TimeSpan& ts)
 }
 
 constexpr int FFT_N = 1024;
-constexpr int BPM_N = 480;
+constexpr int BPMDataSize = 480;
+constexpr int BPMFFT_N = 512;
+constexpr int DisplayFrameRate = 30;
 
 int wmain(int argc, wchar_t* argv[])
 {
@@ -52,25 +54,28 @@ int wmain(int argc, wchar_t* argv[])
         r = folder.GetFileAsync(argv[1]).get();
     }
     else {
-        wcerr << "Not enough arguments. Specify a relative path." << endl;
+        std::wcerr << "Not enough arguments. Specify a relative path." << endl;
         return 1;
     }
 #endif
+    MusicAnalysis ma(r);
 
-    // FFT関連の初期化
+#pragma region /****** L,RチャンネルのFFTを出力する準備 ここから *******/
+    /* FFT関連の初期化 */
     FFTExecutor<float> executor(FFT_N);
     std::unique_ptr<float[]> l_result = std::make_unique<float[]>(FFT_N);
     std::unique_ptr<float[]> r_result = std::make_unique<float[]>(FFT_N);
 
-    
-    // 出力先に関する初期化
+    /* FFT関連の出力先の作成 */
+    // Lチャンネル
     std::ofstream lStream((r.Name() + L"_fft_L.tmp").c_str(), std::ios::trunc | std::ios::binary);
     float lmax = 0; // 検証用
     MemoryUtil<float> l_pcm = MemoryUtil<float>(FFT_N, [&lStream, &executor, &l_result, &lmax](float *pcm) {
         executor.FFT(pcm, l_result.get());
         lStream.write((char*)l_result.get(), sizeof(float) * FFT_N);
         for(int i = 0; i < FFT_N; i++) if (l_result[i] > lmax) lmax = l_result[i];
-    });    
+    }); 
+    // Rチャンネル
     std::ofstream rStream((r.Name() + L"_fft_R.tmp").c_str(), std::ios::trunc | std::ios::binary);
     float rmax = 0;
     MemoryUtil<float> r_pcm = MemoryUtil<float>(FFT_N, [&rStream, &executor, &r_result, &rmax](float* pcm) {
@@ -79,12 +84,13 @@ int wmain(int argc, wchar_t* argv[])
         for (int i = 0; i < FFT_N; i++) if (r_result[i] > rmax) rmax = r_result[i];
     });
 
-    // 処理の作成
-    MusicAnalysis ma(r);
-    AudioEncodingProperties ep = ma.get_graph_properties();
-    ep.ChannelCount(2);
-    ep.SampleRate(30 * FFT_N);
+    /* 処理の作成 */
+    // PCMデータ出力形式の設定
+    AudioEncodingProperties fft_aep = ma.get_graph_properties();
+    fft_aep.ChannelCount(2);
+    fft_aep.SampleRate(DisplayFrameRate * FFT_N);
 
+    // PCMデータをL,Rに振分け
     ma.add_outnode([&l_pcm, &r_pcm](float* pcm, uint32_t capacity, winrt::Windows::Foundation::TimeSpan ts) {
         uint32_t i = 0;
         while (i < capacity) {
@@ -93,54 +99,67 @@ int wmain(int argc, wchar_t* argv[])
             r_pcm.write(pcm[i]);
             i++;
         }
-        // printTimeSpan(ts);
-    }, ep);
+    }, fft_aep);
+    /****** L,RチャンネルのFFTを出力する準備 ここまで *******/
+#pragma endregion
 
-    AudioEncodingProperties aep = ma.get_graph_properties();
-    aep.ChannelCount(1);
-    aep.SampleRate(30 * FFT_N);
+#pragma region /****** BPMと音量を出力する準備 ここから *******/
 
     // std::ofstream tStream((r.Name() + L"_tempo.tmp").c_str(), std::ios::trunc | std::ios::binary);
     std::ofstream vStream((r.Name() + L"_volume.tmp").c_str(), std::ios::trunc | std::ios::binary);
     
 
-    constexpr int bpmFFTSize = 512;
-    std::unique_ptr<float[]> b_result = std::make_unique<float[]>(BPM_N);
-    Container<float> vol_mem(BPM_N);
-    TempoCheck<float> tempo(BPM_N, bpmFFTSize, 30 * FFT_N);
-    auto bpm_func = [&vStream, &tempo, &b_result](float* pcm) {
-        vStream.write((char*)pcm, sizeof(float) * BPM_N);
+    /* BPM関連の初期化 */
+    // 秒間(samplerate(第3引数) / framesize(第2引数))データ
+    // (size(第1引数) * framesize / samplerate)秒分のBPMを取得可能
+    TempoCheck<float> tempo(BPMDataSize, BPMFFT_N, DisplayFrameRate * FFT_N);
+    Container<float> vol_mem(BPMDataSize);  // BPMの取得、出力用バッファ
+
+    auto bpm_func = [&vStream, &tempo](float* pcm) {  // BPMの取得、出力用関数
+        vStream.write((char*)pcm, sizeof(float) * BPMDataSize);
         
         auto [bpm1, bpm2] = tempo.get_BPM<2>(pcm, 60, 270);
         std::wcout << "bpm:" << bpm1 << ',' << bpm2 << std::endl;
     };
-    std::unique_ptr<float[]> v_result = std::make_unique<float[]>(bpmFFTSize);
-    FFTExecutor<float> bpmFFT(bpmFFTSize);
-    MemoryUtil<float> t_pcm = MemoryUtil<float>(bpmFFTSize, [&vol_mem, &bpm_func, &bpmFFT, &v_result](float* pcm) {
+    std::unique_ptr<float[]> bpmFFT_result = std::make_unique<float[]>(BPMFFT_N);
+    FFTExecutor<float> bpmFFT(BPMFFT_N);
+    // 音量への変換、BPM解析の実行
+    MemoryUtil<float> t_pcm = MemoryUtil<float>(BPMFFT_N, [&vol_mem, &bpm_func, &bpmFFT, &bpmFFT_result](float* pcm) {
+        /* 音量の生成 */
         float sum = 0;
 #if true
-        bpmFFT.FFT(pcm, v_result.get());
-        for (uint32_t i = 0; i < bpmFFTSize; ++i) {
-            sum += v_result[i] * v_result[i];
+        bpmFFT.FFT(pcm, bpmFFT_result.get());
+        for (uint32_t i = 0; i < BPMFFT_N; ++i) {
+            sum += bpmFFT_result[i] * bpmFFT_result[i];
         }
-        float vol = std::sqrt(sum / bpmFFTSize);
+        float vol = std::sqrt(sum / BPMFFT_N);
 #else 
         // 実行値
-        for (uint32_t i = 0; i < bpmFFTSize; ++i) {
+        for (uint32_t i = 0; i < BPMFFT_N; ++i) {
             sum += pcm[i] * pcm[i];
         }
-        float vol = std::sqrt(sum / bpmFFTSize);
+        float vol = std::sqrt(sum / BPMFFT_N);
 #endif
         vol_mem.write(vol);
         if (vol_mem.is_max()) {
             vol_mem.Process(bpm_func).get();
         }
     });
+
+    // PCMデータ出力形式の設定
+    AudioEncodingProperties bpm_aep = ma.get_graph_properties();
+    bpm_aep.ChannelCount(1);
+    bpm_aep.SampleRate(DisplayFrameRate* FFT_N);
+
+    // PCMデータを流す
     ma.add_outnode([&t_pcm](float* pcm, uint32_t capacity, winrt::Windows::Foundation::TimeSpan ts) {
         for (uint32_t i = 0; i < capacity; ++i) {
             t_pcm.write(pcm[i]);
         }
-    }, aep);
+        printTimeSpan(ts);  // 処理進捗の表示
+    }, bpm_aep);
+    /****** BPMと音量を出力する準備 ここまで *******/
+#pragma endregion
 
     // 実行
     ma.execute().get();
