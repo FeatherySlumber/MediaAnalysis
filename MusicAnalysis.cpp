@@ -55,6 +55,11 @@ const winrt::Windows::Media::MediaProperties::AudioEncodingProperties MusicAnaly
     return audioGraph.EncodingProperties();
 }
 
+const winrt::Windows::Foundation::TimeSpan MusicAnalysis::get_audio_duration()
+{
+    return in_node.Duration();
+}
+
 void MusicAnalysis::add_outnode(std::function<void(float*, uint32_t, winrt::Windows::Foundation::TimeSpan)> action, winrt::Windows::Media::MediaProperties::AudioEncodingProperties const& properties)
 {
     winrt::Windows::Media::Audio::AudioFrameOutputNode frameOutputNode = audioGraph.CreateFrameOutputNode(properties);

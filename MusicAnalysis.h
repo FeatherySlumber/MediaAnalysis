@@ -65,6 +65,11 @@ public:
     const winrt::Windows::Media::MediaProperties::AudioEncodingProperties get_graph_properties();
 
     /**
+     * @brief 音声の長さを取得する
+     */
+    const winrt::Windows::Foundation::TimeSpan get_audio_duration();
+
+    /**
      * @brief 出力ノードを追加する
      * @param action コールバック関数
      * @param properties エンコーディングプロパティ
