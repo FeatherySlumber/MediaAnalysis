@@ -8,10 +8,14 @@
 #include <ratio>
 
 
-winrt::Windows::Foundation::IAsyncOperation<winrt::Windows::Storage::StorageFolder> getCurrentStorageFolder()
+static winrt::Windows::Foundation::IAsyncOperation<winrt::Windows::Storage::StorageFolder> getCurrentStorageFolder()
 {
-    std::unique_ptr<wchar_t[]> lpBuffer = std::make_unique<wchar_t[]>(MAX_PATH);
-    GetCurrentDirectory(MAX_PATH, lpBuffer.get());
+    const DWORD bufferSize = GetCurrentDirectory(0, NULL);
+    if (bufferSize == 0) {
+        winrt::throw_last_error();
+    }
+    std::unique_ptr<wchar_t[]> lpBuffer = std::make_unique<wchar_t[]>(bufferSize);
+    winrt::check_bool(GetCurrentDirectory(bufferSize, lpBuffer.get()));
     // wprintf(L"%ls\n", lpBuffer.get());
     return winrt::Windows::Storage::StorageFolder::GetFolderFromPathAsync(lpBuffer.get());
 }
