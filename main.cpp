@@ -64,6 +64,8 @@ constexpr int FFT_N = 1024;
 constexpr int BPMDataSize = 480;
 constexpr int BPMFFT_N = 512;
 constexpr int BPMOutputCount = 3;
+constexpr int BPMLower = 60;
+constexpr int BPMUpper = 270;
 constexpr int DisplayFrameRate = 30;
 
 int wmain(int argc, wchar_t* argv[])
@@ -78,6 +80,7 @@ int wmain(int argc, wchar_t* argv[])
 #if true // test
     StorageFile r = getCurrentStorageFolder().get().GetFileAsync(L"test.mp3").get();
 #else
+    // ファイルが指定されなければエラー
     StorageFile r{ nullptr };
     if (argc >= 2) {
         r = StorageFile::GetFileFromPathAsync(argv[1]).get();
@@ -87,6 +90,7 @@ int wmain(int argc, wchar_t* argv[])
         return 1;
     }
 #endif
+    // 出力先フォルダーが指定されなければファイル名を指定
     StorageFolder f{ nullptr };
     if (argc >= 3) {
         f = StorageFolder::GetFolderFromPathAsync(argv[2]).get();
@@ -168,13 +172,14 @@ winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::S
     auto bpm_func = [&vStream, &tStream, &tempo](float* pcm) {  // BPMの取得、出力用関数
         vStream.write(reinterpret_cast<const char*>(pcm), sizeof(float) * BPMDataSize);
 
-        std::array<unsigned int, BPMOutputCount> bpms = tempo.get_BPM<BPMOutputCount>(pcm, 60, 270);
+        std::array<unsigned int, BPMOutputCount> bpms = tempo.get_BPM<BPMOutputCount>(pcm, BPMLower, BPMUpper);
         tStream.write(reinterpret_cast<const char*>(bpms.data()), sizeof(unsigned int) * BPMOutputCount);
         };
     std::unique_ptr<float[]> bpmFFT_result = std::make_unique<float[]>(BPMFFT_N);
     FFTExecutor<float> bpmFFT(BPMFFT_N);
     // 音量への変換、BPM解析の実行
-    MemoryUtil<float> t_pcm = MemoryUtil<float>(BPMFFT_N, [&vol_mem, &bpm_func, &bpmFFT, &bpmFFT_result](float* pcm) {
+    float vmax = 0;
+    MemoryUtil<float> t_pcm = MemoryUtil<float>(BPMFFT_N, [&vol_mem, &bpm_func, &bpmFFT, &bpmFFT_result, &vmax](float* pcm) {
         /* 音量の生成 */
         float sum = 0;
 #if true
@@ -190,6 +195,7 @@ winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::S
         }
         float vol = std::sqrt(sum / BPMFFT_N);
 #endif
+        if (vmax < vol) vmax = vol;
         vol_mem.write(vol);
         if (vol_mem.is_max()) {
             vol_mem.Process(bpm_func).get();
@@ -222,7 +228,37 @@ winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::S
     vStream.close();
     tStream.close();
 
-    std::wcout << std::endl << "Max FFT Value:" << (lmax > rmax ? lmax : rmax) << std::endl;
+    float fmax = lmax > rmax ? lmax : rmax;
+    std::wcout << std::endl << "Max FFT Value:" << fmax << std::endl;
+    std::wcout << "Max Volume Value:" << vmax << std::endl;
+
+    winrt::Windows::Data::Json::JsonObject json = [&]() -> winrt::Windows::Data::Json::JsonObject {
+        using namespace winrt::Windows::Data::Json;
+        JsonObject j{};
+        j.Insert(L"fft", [&fmax]() {
+            JsonObject f{};
+            f.Insert(L"fftSize", JsonValue::CreateNumberValue(FFT_N));
+            f.Insert(L"fftPerSecond", JsonValue::CreateNumberValue(DisplayFrameRate));
+            f.Insert(L"fftMaxValue", JsonValue::CreateNumberValue(fmax));
+            return f;
+            }());
+        j.Insert(L"bpm", []() {
+            JsonObject b{};
+            b.Insert(L"bpmEstRange", []() {
+                JsonArray bpmRange{};
+                bpmRange.Append(JsonValue::CreateNumberValue(BPMLower));
+                bpmRange.Append(JsonValue::CreateNumberValue(BPMUpper));
+                return bpmRange;
+                }());
+            b.Insert(L"bpmEstSection", JsonValue::CreateNumberValue(BPMDataSize * BPMFFT_N / (DisplayFrameRate * FFT_N)));
+            b.Insert(L"bpmCount", JsonValue::CreateNumberValue(BPMOutputCount));
+            return b;
+            }());
+        j.Insert(L"volumeMaxValue", JsonValue::CreateNumberValue(vmax));
+        return j;
+        }();
+    winrt::Windows::Storage::StorageFile jsonfile{ co_await output.CreateFileAsync(L"Data.json", winrt::Windows::Storage::CreationCollisionOption::ReplaceExisting) };
+    co_await winrt::Windows::Storage::FileIO::WriteTextAsync(jsonfile, json.ToString());
 
     co_return;
 }

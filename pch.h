@@ -11,6 +11,7 @@
 #include <winrt/Windows.Media.Audio.h>
 #include <winrt/Windows.Media.Render.h>
 #include <winrt/Windows.Media.MediaProperties.h>
+#include <winrt/Windows.Data.Json.h>
 
 /* windows関連 */
 #include <concurrent_queue.h>
