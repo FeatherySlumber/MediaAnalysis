@@ -7,7 +7,7 @@
 #include <chrono>
 #include <ratio>
 
-winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(winrt::Windows::Storage::StorageFile audioSource, winrt::Windows::Storage::StorageFolder output);
+winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::Storage::StorageFile& audioSource, const winrt::Windows::Storage::StorageFolder& output);
 
 static winrt::Windows::Foundation::IAsyncOperation<winrt::Windows::Storage::StorageFolder> getCurrentStorageFolder()
 {
@@ -19,6 +19,16 @@ static winrt::Windows::Foundation::IAsyncOperation<winrt::Windows::Storage::Stor
     winrt::check_bool(GetCurrentDirectory(bufferSize, lpBuffer.get()));
     // wprintf(L"%ls\n", lpBuffer.get());
     return winrt::Windows::Storage::StorageFolder::GetFolderFromPathAsync(lpBuffer.get());
+}
+
+// StorageFile::DisplayName()が拡張子付きファイル名を返す場合があるらしいため確実に拡張子を外した文字列を返す
+static winrt::hstring getFileNameWithoutExtension(const winrt::Windows::Storage::StorageFile& item) 
+{
+    size_t length = static_cast<size_t>(item.Name().size()) + 1;
+    std::unique_ptr<wchar_t[]> buff = std::make_unique<wchar_t[]>(length);
+    std::wmemcpy(buff.get(), item.Name().c_str(), length);
+    PathCchRemoveExtension(buff.get(), length);
+    return winrt::hstring(buff.get());
 }
 
 void printTimeSpan(const winrt::Windows::Foundation::TimeSpan& ts)
@@ -67,9 +77,8 @@ int wmain(int argc, wchar_t* argv[])
     winrt::init_apartment();
 
     // ファイル取得
-    StorageFolder folder = getCurrentStorageFolder().get();
 #if true // test
-    StorageFile r = folder.GetFileAsync(L"120.mp3").get();
+    StorageFile r = getCurrentStorageFolder().get().GetFileAsync(L"120.mp3").get();
 #else
     StorageFile r{ nullptr };
     if (argc >= 2) {
@@ -81,12 +90,21 @@ int wmain(int argc, wchar_t* argv[])
     }
 #endif
 
-    FFTAndBPMOutput(r, folder).get();
+    StorageFolder f{ nullptr };
+    if (argc >= 3) {
+        f = StorageFolder::GetFolderFromPathAsync(argv[2]).get();
+    }
+    else {
+        f = getCurrentStorageFolder().get().CreateFolderAsync(getFileNameWithoutExtension(r), CreationCollisionOption::OpenIfExists).get();
+    }
+    std::wcout << f.Path().c_str() << std::endl;
+
+    FFTAndBPMOutput(r, f).get();
 
     return 0;
 }
 
-winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(winrt::Windows::Storage::StorageFile audioSource, winrt::Windows::Storage::StorageFolder output) 
+winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::Storage::StorageFile& audioSource, const winrt::Windows::Storage::StorageFolder& output)
 {
     using namespace winrt::Windows::Media::Core;
     using namespace winrt::Windows::Media::Audio;
