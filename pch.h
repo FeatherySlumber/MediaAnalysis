@@ -13,7 +13,6 @@
 #include <winrt/Windows.Media.MediaProperties.h>
 
 /* windows関連 */
-#include <PathCch.h>
 #include <concurrent_queue.h>
 
 /* デバッグ */
@@ -23,7 +22,7 @@
 #include <iostream>
 #include <fstream>
 
-#include <cwchar>
+#include <filesystem>
 
 #include <vector>
 #include <queue>

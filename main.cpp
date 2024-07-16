@@ -22,13 +22,10 @@ static winrt::Windows::Foundation::IAsyncOperation<winrt::Windows::Storage::Stor
 }
 
 // StorageFile::DisplayName()が拡張子付きファイル名を返す場合があるらしいため確実に拡張子を外した文字列を返す
-static winrt::hstring getFileNameWithoutExtension(const winrt::Windows::Storage::StorageFile& item) 
+static std::filesystem::path getFileNameWithoutExtension(const winrt::Windows::Storage::StorageFile& item)
 {
-    size_t length = static_cast<size_t>(item.Name().size()) + 1;
-    std::unique_ptr<wchar_t[]> buff = std::make_unique<wchar_t[]>(length);
-    std::wmemcpy(buff.get(), item.Name().c_str(), length);
-    PathCchRemoveExtension(buff.get(), length);
-    return winrt::hstring(buff.get());
+    std::filesystem::path p = item.Name().c_str();
+    return p.stem();
 }
 
 void printTimeSpan(const winrt::Windows::Foundation::TimeSpan& ts)
@@ -74,11 +71,12 @@ int wmain(int argc, wchar_t* argv[])
     using namespace winrt::Windows::Storage;
 
     // 初期化
-    winrt::init_apartment();
+    winrt::init_apartment(); 
+    std::wcout.imbue(std::locale("japanese"));
 
     // ファイル取得
 #if true // test
-    StorageFile r = getCurrentStorageFolder().get().GetFileAsync(L"120.mp3").get();
+    StorageFile r = getCurrentStorageFolder().get().GetFileAsync(L"test.mp3").get();
 #else
     StorageFile r{ nullptr };
     if (argc >= 2) {
@@ -89,13 +87,12 @@ int wmain(int argc, wchar_t* argv[])
         return 1;
     }
 #endif
-
     StorageFolder f{ nullptr };
     if (argc >= 3) {
         f = StorageFolder::GetFolderFromPathAsync(argv[2]).get();
     }
     else {
-        f = getCurrentStorageFolder().get().CreateFolderAsync(getFileNameWithoutExtension(r), CreationCollisionOption::OpenIfExists).get();
+        f = getCurrentStorageFolder().get().CreateFolderAsync(getFileNameWithoutExtension(r).c_str(), CreationCollisionOption::OpenIfExists).get();
     }
     std::wcout << f.Path().c_str() << std::endl;
 
