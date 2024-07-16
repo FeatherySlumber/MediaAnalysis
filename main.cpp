@@ -60,6 +60,28 @@ static void printChangeTimeSpan(const winrt::Windows::Foundation::TimeSpan& ts)
     }
 }
 
+static void printJson(const winrt::Windows::Data::Json::IJsonValue value, int tab = 0)
+{
+    switch (value.ValueType())
+    {
+        using enum winrt::Windows::Data::Json::JsonValueType;
+    case Object:
+        for (const auto& j : value.GetObjectW()) {
+            std::wcout << '\n' << std::wstring(tab, '\t') << j.Key().c_str() << "\t:";
+            printJson(j.Value(), tab + 1);
+        }
+        break;
+    case Array:
+        for (const auto& i : value.GetArray()) {
+            printJson(i);
+        }
+        break;
+    default:
+        std::wcout << value.Stringify().c_str() << '\t';
+        break;
+    }
+}
+
 constexpr int FFT_N = 1024;
 constexpr int BPMDataSize = 480;
 constexpr int BPMFFT_N = 512;
@@ -229,8 +251,6 @@ winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::S
     tStream.close();
 
     float fmax = lmax > rmax ? lmax : rmax;
-    std::wcout << std::endl << "Max FFT Value:" << fmax << std::endl;
-    std::wcout << "Max Volume Value:" << vmax << std::endl;
 
     winrt::Windows::Data::Json::JsonObject json = [&]() -> winrt::Windows::Data::Json::JsonObject {
         using namespace winrt::Windows::Data::Json;
@@ -259,6 +279,7 @@ winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::S
         }();
     winrt::Windows::Storage::StorageFile jsonfile{ co_await output.CreateFileAsync(L"Data.json", winrt::Windows::Storage::CreationCollisionOption::ReplaceExisting) };
     co_await winrt::Windows::Storage::FileIO::WriteTextAsync(jsonfile, json.ToString());
+    printJson(json);
 
     co_return;
 }
