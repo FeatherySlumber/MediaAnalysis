@@ -50,7 +50,7 @@ static void printChangeTimeSpan(const winrt::Windows::Foundation::TimeSpan& ts)
         before = count;
 
         int minutes = static_cast<int>(count / 600);  // 60 * 10
-        int seconds = static_cast<int>((count % 60) / 10);
+        int seconds = static_cast<int>((count % 600) / 10);
         int deciseconds = static_cast<int>(count % 10);
 
         std::wcout << std::setw(2) << std::setfill(L'0') << minutes << ":"
