@@ -109,6 +109,8 @@ winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::S
 
     MusicAnalysis ma(audioSource);
 
+    std::filesystem::path out_path = output.Path().c_str();
+
 #pragma region /****** L,RチャンネルのFFTを出力する準備 ここから *******/
     /* FFT関連の初期化 */
     FFTExecutor<float> executor(FFT_N);
@@ -117,7 +119,7 @@ winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::S
 
     /* FFT関連の出力先の作成 */
     // Lチャンネル
-    std::ofstream lStream((audioSource.Name() + L"_fft_L.tmp").c_str(), std::ios::trunc | std::ios::binary);
+    std::ofstream lStream((out_path / L"FFT_L.bin"), std::ios::trunc | std::ios::binary);
     float lmax = 0; // 検証用
     MemoryUtil<float> l_pcm = MemoryUtil<float>(FFT_N, [&lStream, &executor, &l_result, &lmax](float* pcm) {
         executor.FFT(pcm, l_result.get());
@@ -125,7 +127,7 @@ winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::S
         for (int i = 0; i < FFT_N; i++) if (l_result[i] > lmax) lmax = l_result[i];
         });
     // Rチャンネル
-    std::ofstream rStream((audioSource.Name() + L"_fft_R.tmp").c_str(), std::ios::trunc | std::ios::binary);
+    std::ofstream rStream((out_path / L"FFT_R.bin"), std::ios::trunc | std::ios::binary);
     float rmax = 0;
     MemoryUtil<float> r_pcm = MemoryUtil<float>(FFT_N, [&rStream, &executor, &r_result, &rmax](float* pcm) {
         executor.FFT(pcm, r_result.get());
@@ -153,8 +155,8 @@ winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::S
 #pragma endregion
 
 #pragma region /****** BPMと音量を出力する準備 ここから *******/
-    std::ofstream tStream((audioSource.Name() + L"_tempo.tmp").c_str(), std::ios::trunc | std::ios::binary);
-    std::ofstream vStream((audioSource.Name() + L"_volume.tmp").c_str(), std::ios::trunc | std::ios::binary);
+    std::ofstream tStream((out_path / L"BPM.bin"), std::ios::trunc | std::ios::binary);
+    std::ofstream vStream((out_path / L"Volume.bin"), std::ios::trunc | std::ios::binary);
 
 
     /* BPM関連の初期化 */
