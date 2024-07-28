@@ -42,6 +42,7 @@ public:
 			T sum1 = 0, sum2 = 0;
 			T b = T(i) / lower;
 			for (uint32_t n = 0; n < N; ++n) {
+			 	if (volume[n] == 0) continue;
 				sum1 += volume[n] * std::cos(T(2.0) * std::numbers::pi_v<T> * b * n / frame_sample_rate) * get_han_window(n);
 				sum2 += volume[n] * std::sin(T(2.0) * std::numbers::pi_v<T> * b * n / frame_sample_rate) * get_han_window(n);
 			}
