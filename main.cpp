@@ -140,8 +140,9 @@ winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::S
 #pragma region /****** L,RチャンネルのFFTを出力する準備 ここから *******/
     /* FFT関連の初期化 */
     FFTExecutor<float> executor(FFT_N);
-    std::unique_ptr<float[]> l_result = std::make_unique<float[]>(FFT_N);
-    std::unique_ptr<float[]> r_result = std::make_unique<float[]>(FFT_N);
+    constexpr int FFTResultSize = FFT_N / 2;
+    std::unique_ptr<float[]> l_result = std::make_unique<float[]>(FFTResultSize);
+    std::unique_ptr<float[]> r_result = std::make_unique<float[]>(FFTResultSize);
 
     /* FFT関連の出力先の作成 */
     // Lチャンネル
@@ -149,16 +150,16 @@ winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::S
     float lmax = 0; // 検証用
     MemoryUtil<float> l_pcm = MemoryUtil<float>(FFT_N, [&lStream, &executor, &l_result, &lmax](float* pcm) {
         executor.FFT(pcm, l_result.get());
-        lStream.write(reinterpret_cast<const char*>(l_result.get()), sizeof(float) * FFT_N);
-        for (int i = 0; i < FFT_N; i++) if (l_result[i] > lmax) lmax = l_result[i];
+        lStream.write(reinterpret_cast<const char*>(l_result.get()), sizeof(float) * FFTResultSize);
+        for (int i = 0; i < FFTResultSize; i++) if (l_result[i] > lmax) lmax = l_result[i];
         });
     // Rチャンネル
     std::ofstream rStream((out_path / L"FFT_R.bin"), std::ios::trunc | std::ios::binary);
     float rmax = 0;
     MemoryUtil<float> r_pcm = MemoryUtil<float>(FFT_N, [&rStream, &executor, &r_result, &rmax](float* pcm) {
         executor.FFT(pcm, r_result.get());
-        rStream.write(reinterpret_cast<const char*>(r_result.get()), sizeof(float) * FFT_N);
-        for (int i = 0; i < FFT_N; i++) if (r_result[i] > rmax) rmax = r_result[i];
+        rStream.write(reinterpret_cast<const char*>(r_result.get()), sizeof(float) * FFTResultSize);
+        for (int i = 0; i < FFTResultSize; i++) if (r_result[i] > rmax) rmax = r_result[i];
         });
 
     /* 処理の作成 */
@@ -195,10 +196,11 @@ winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::S
         vStream.write(reinterpret_cast<const char*>(pcm), sizeof(float) * BPMDataSize);
 
         std::array<unsigned int, BPMOutputCount> bpms = tempo.get_BPM<BPMOutputCount>(pcm, BPMLower, BPMUpper);
+        std::wcout << bpms[0] << ',' << bpms[1] << ',' << bpms[2] << std::endl;
         tStream.write(reinterpret_cast<const char*>(bpms.data()), sizeof(unsigned int) * BPMOutputCount);
         };
-    std::unique_ptr<float[]> bpmFFT_result = std::make_unique<float[]>(BPMFFT_N);
     FFTExecutor<float> bpmFFT(BPMFFT_N);
+    std::unique_ptr<float[]> bpmFFT_result = std::make_unique<float[]>(BPMFFT_N / 2);
     // 音量への変換、BPM解析の実行
     float vmax = 0;
     MemoryUtil<float> t_pcm = MemoryUtil<float>(BPMFFT_N, [&vol_mem, &bpm_func, &bpmFFT, &bpmFFT_result, &vmax](float* pcm) {
@@ -206,9 +208,9 @@ winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::S
         float sum = 0;
 #if true
         bpmFFT.FFT(pcm, bpmFFT_result.get());
-        for (uint32_t i = 0; i < BPMFFT_N; ++i) {
+        for (uint32_t i = 0; i < BPMFFT_N / 2; ++i) {
             sum += bpmFFT_result[i] * bpmFFT_result[i];
-}
+        }
         float vol = std::sqrt(sum / BPMFFT_N);
 #else 
         // 実行値

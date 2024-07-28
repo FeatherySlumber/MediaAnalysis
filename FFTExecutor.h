@@ -87,7 +87,7 @@ public:
 			}
 		}
 
-		for (std::uint_fast32_t i = 0; i < (N >> 1) + 1; ++i) {
+		for (std::uint_fast32_t i = 0; i < (N >> 1); ++i) {
 			result[i] = abs(ans[i]);
 		}
 	}
@@ -183,7 +183,7 @@ inline void FFTExecutor<float>::FFT(float* pcm, float* result) {
 		}
 	}
 #endif
-	for (std::uint_fast32_t i = 0; i < (N >> 1) + 1; ++i) {
+	for (std::uint_fast32_t i = 0; i < (N >> 1); ++i) {
 		result[i] = abs(ans[i]);
 	}
 }
