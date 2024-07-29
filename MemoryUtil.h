@@ -99,7 +99,7 @@ class MemoryUtil
 	void ProcessCompletedHandler(winrt::Windows::Foundation::IAsyncAction const& asyncInfo, winrt::Windows::Foundation::AsyncStatus const asyncStatus) {
 		std::weak_ptr<Container<T>> next;
 
-		_RPT1(_CRT_WARN, "1 Container Processed, %d Container Left.\n", exe_queue.unsafe_size());
+		_RPT1(_CRT_WARN, "%p : 1 Container Processed, %d Container Left.\n", this, exe_queue.unsafe_size());
 
 		if (!exe_queue.try_pop(next)) {
 			can_running.release();

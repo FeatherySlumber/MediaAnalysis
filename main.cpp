@@ -100,7 +100,7 @@ int wmain(int argc, wchar_t* argv[])
 
     // ファイル取得
 #if true // test
-    StorageFile r = getCurrentStorageFolder().get().GetFileAsync(L"test.mp3").get();
+    StorageFile r = getCurrentStorageFolder().get().GetFileAsync(L"120.mp3").get();
 #else
     // ファイルが指定されなければエラー
     StorageFile r{ nullptr };
@@ -190,20 +190,19 @@ winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::S
     // 秒間(samplerate(第3引数) / framesize(第2引数))データ
     // (size(第1引数) * framesize / samplerate)秒分のBPMを取得可能
     TempoCheck<float> tempo(BPMDataSize, BPMFFT_N, DisplayFrameRate * FFT_N);
-    Container<float> vol_mem(BPMDataSize);  // BPMの取得、出力用バッファ
-
-    auto bpm_func = [&vStream, &tStream, &tempo](float* pcm) {  // BPMの取得、出力用関数
+    MemoryUtil<float> tempo_mem(BPMDataSize, [&vStream, &tStream, &tempo](float* pcm) {  // BPMの取得、出力用関数
         vStream.write(reinterpret_cast<const char*>(pcm), sizeof(float) * BPMDataSize);
 
         std::array<unsigned int, BPMOutputCount> bpms = tempo.get_BPM<BPMOutputCount>(pcm, BPMLower, BPMUpper);
-        std::wcout << bpms[0] << ',' << bpms[1] << ',' << bpms[2] << std::endl;
+        // std::wcout << bpms[0] << ',' << bpms[1] << ',' << bpms[2] << std::endl;
         tStream.write(reinterpret_cast<const char*>(bpms.data()), sizeof(unsigned int) * BPMOutputCount);
-        };
+        });  // BPMの取得、出力用バッファ
+
     FFTExecutor<float> bpmFFT(BPMFFT_N);
     std::unique_ptr<float[]> bpmFFT_result = std::make_unique<float[]>(BPMFFT_N / 2);
     // 音量への変換、BPM解析の実行
     float vmax = 0;
-    MemoryUtil<float> t_pcm = MemoryUtil<float>(BPMFFT_N, [&vol_mem, &bpm_func, &bpmFFT, &bpmFFT_result, &vmax](float* pcm) {
+    MemoryUtil<float> volume_mem = MemoryUtil<float>(BPMFFT_N, [&tempo_mem, &bpmFFT, &bpmFFT_result, &vmax](float* pcm) {
         /* 音量の生成 */
         float sum = 0;
 #if true
@@ -220,10 +219,7 @@ winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::S
         float vol = std::sqrt(sum / BPMFFT_N);
 #endif
         if (vmax < vol) vmax = vol;
-        vol_mem.write(vol);
-        if (vol_mem.is_max()) {
-            vol_mem.Process(bpm_func).get();
-        }
+        tempo_mem.write(vol);
     });
 
     // PCMデータ出力形式の設定
@@ -232,11 +228,11 @@ winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::S
     bpm_aep.SampleRate(DisplayFrameRate * FFT_N);
 
     // PCMデータを流す
-    ma.add_outnode([&t_pcm](float* pcm, uint32_t capacity, winrt::Windows::Foundation::TimeSpan ts) {
+    ma.add_outnode([&volume_mem](float* pcm, uint32_t capacity, winrt::Windows::Foundation::TimeSpan ts) {
         for (uint32_t i = 0; i < capacity; ++i) {
-            t_pcm.write(pcm[i]);
+            volume_mem.write(pcm[i]);
         }
-        printChangeTimeSpan(ts);  // 処理進捗の表示
+        // printChangeTimeSpan(ts);  // 処理進捗の表示
         }, bpm_aep);
     /****** BPMと音量を出力する準備 ここまで *******/
 #pragma endregion
@@ -245,7 +241,8 @@ winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::S
     co_await ma.execute();
     co_await l_pcm.wait_all_processes_end();
     co_await r_pcm.wait_all_processes_end();
-    co_await t_pcm.wait_all_processes_end();
+    co_await volume_mem.wait_all_processes_end();
+    co_await tempo_mem.wait_all_processes_end();
 
     lStream.close();
     rStream.close();
