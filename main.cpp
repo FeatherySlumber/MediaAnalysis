@@ -100,7 +100,7 @@ int wmain(int argc, wchar_t* argv[])
 
     // ファイル取得
 #if true // test
-    StorageFile r = getCurrentStorageFolder().get().GetFileAsync(L"120.mp3").get();
+    StorageFile r = getCurrentStorageFolder().get().GetFileAsync(L"80.mp3").get();
 #else
     // ファイルが指定されなければエラー
     StorageFile r{ nullptr };
@@ -232,7 +232,7 @@ winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::S
         for (uint32_t i = 0; i < capacity; ++i) {
             volume_mem.write(pcm[i]);
         }
-        // printChangeTimeSpan(ts);  // 処理進捗の表示
+        printChangeTimeSpan(ts);  // 処理進捗の表示
         }, bpm_aep);
     /****** BPMと音量を出力する準備 ここまで *******/
 #pragma endregion
@@ -256,24 +256,29 @@ winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::S
         JsonObject j{};
         j.Insert(L"fft", [&fmax]() {
             JsonObject f{};
-            f.Insert(L"fftSize", JsonValue::CreateNumberValue(FFT_N));
-            f.Insert(L"fftPerSecond", JsonValue::CreateNumberValue(DisplayFrameRate));
-            f.Insert(L"fftMaxValue", JsonValue::CreateNumberValue(fmax));
+            f.Insert(L"size", JsonValue::CreateNumberValue(FFT_N));
+            f.Insert(L"perSecond", JsonValue::CreateNumberValue(DisplayFrameRate));
+            f.Insert(L"maxValue", JsonValue::CreateNumberValue(fmax));
             return f;
             }());
         j.Insert(L"bpm", []() {
             JsonObject b{};
-            b.Insert(L"bpmEstRange", []() {
+            b.Insert(L"estRange", []() {
                 JsonArray bpmRange{};
                 bpmRange.Append(JsonValue::CreateNumberValue(BPMLower));
                 bpmRange.Append(JsonValue::CreateNumberValue(BPMUpper));
                 return bpmRange;
                 }());
-            b.Insert(L"bpmEstSection", JsonValue::CreateNumberValue(BPMDataSize * BPMFFT_N / (DisplayFrameRate * FFT_N)));
-            b.Insert(L"bpmCount", JsonValue::CreateNumberValue(BPMOutputCount));
+            b.Insert(L"estSection", JsonValue::CreateNumberValue(BPMDataSize * BPMFFT_N / (DisplayFrameRate * FFT_N)));
+            b.Insert(L"count", JsonValue::CreateNumberValue(BPMOutputCount));
             return b;
             }());
-        j.Insert(L"volumeMaxValue", JsonValue::CreateNumberValue(vmax));
+        j.Insert(L"volume", [&vmax]() {
+            JsonObject v{};
+            v.Insert(L"perSecond", JsonValue::CreateNumberValue(DisplayFrameRate * FFT_N / BPMFFT_N));
+            v.Insert(L"maxValue", JsonValue::CreateNumberValue(vmax));
+            return v;
+            }());
         return j;
         }();
     winrt::Windows::Storage::StorageFile jsonfile{ co_await output.CreateFileAsync(L"Data.json", winrt::Windows::Storage::CreationCollisionOption::ReplaceExisting) };
