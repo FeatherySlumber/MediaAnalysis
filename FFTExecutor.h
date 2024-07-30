@@ -14,82 +14,46 @@
 template<std::floating_point T>
 class FFTExecutor
 {
-	/**
-	 * @brief FFTの計算用データをキャッシュするためのネストクラス。
-	 *
-	 * @tparam U FFT 計算用の浮動小数点型。
-	 */
-	template<std::floating_point U>
-	class FFTCache {
-		std::vector<std::complex<U>> weight;	/// FFTの重みのvector。
-		std::vector<int> reverce_indexes;		/// indexをビット反転したvector
-		std::vector<U> han_windows;				/// ハン窓のvector
+	const std::vector<std::complex<T>> weight;
+	const std::vector<std::uint_fast32_t> rindexes;
+	const std::vector<T> han_windows;				/// ハン窓のvector
 
-	public:
-		int N;	/// FFTのサイズ
-
-		/**
-		 * @brief 重み、ビット反転インデックス、ハニング窓を構築する。
-		 *
-		 * @param size FFTのサイズ。
-		 */
-		FFTCache(int size) : N(size), weight(size / 2), reverce_indexes(size), han_windows(size / 2 + 1) {
-			// 重みの初期化
-			for (int i = 0; i < weight.size(); i++) {
-				weight[i] = std::polar(1.0f, -i * std::numbers::pi_v<U> *2 / N);
-			}
-
-			// ビット反転の初期化
-			for (int j = 0; auto & x : reverce_indexes)
-			{
-				x = j;
-				int k = N;
-				while (k > (j ^= (k >>= 1)));
-			}
-
-			// ハン窓の初期化、後半を前半で代用
-			for (int i = 0; i < han_windows.size(); i++) {
-				han_windows[i] = 0.5f - 0.5f * std::cos(2.0f * std::numbers::pi_v<U> *i / N);
-			}
+	// 重みの初期化
+	static std::vector<std::complex<T>> init_weight(std::uint_fast32_t n) {
+		std::vector<std::complex<T>> w(n >> 1);
+		for (std::uint_fast32_t i = 0; i < w.size(); ++i)
+		{
+			w[i] = std::polar(T(1.0), i * std::numbers::pi_v<T> *-2 / n);
 		}
+		return w;
+	}
 
-		/**
-		 * @brief 重みを取得する。
-		 * 重みの計算に必要なvalue/stageの小数値が必要。
-		 * 
-		 * @param value 0 <= value < stage
-		 * @param stage 2の乗数に限る。
-		 * @return 複素数
-		 */
-		std::complex<U> get_weight(int value, int stage) const {
-			return weight[value * reverce_indexes[stage]];
-			// return weight[(value * N) / (stage * 2)]
+	// ビット反転の初期化
+	static std::vector<std::uint_fast32_t> init_rindexes(std::uint_fast32_t n) {
+		std::vector<std::uint_fast32_t> ri(n);
+		for (std::uint_fast32_t j = 0; auto & x : ri)
+		{
+			x = j;
+			std::uint_fast32_t k = n;
+			while (k > (j ^= (k >>= 1)));
 		}
-		/**
-		 * @brief 値のビット反転値を得る。
-		 *
-		 * @param value インデックス
-		 * @return ビット反転したインデックス
-		 */
-		int get_reverce_index(int value) const {
-			return reverce_indexes[value];
+		return ri;
+	}
+
+	// ハン窓の初期化、後半を前半で代用
+	static std::vector<T> init_windows(std::uint_fast32_t n) {
+		std::vector<T> hw((n >> 1) + 1);
+		for (std::uint_fast32_t i = 0; i < hw.size(); ++i) {
+			hw[i] = 0.5f - 0.5f * std::cos(2.0f * std::numbers::pi_v<T> *i / n);
 		}
-		/**
-		 * @brief インデックスに応じたハン窓の値を得る。
-		 *
-		 * @param value インデックス
-		 * @return ハニング窓の値
-		 */
-		U get_han_window(int value) const {
-			return han_windows[value <= N / 2 ? value : N - value];
-		}
-	};
-	const FFTCache<T> data;	/// FFT計算用キャッシュ。
+		return hw;
+	}
 public:
+	const std::uint_fast32_t N;
 	/**
 	 * @param size FFTのサイズ。2の乗数に限る
 	 */
-	FFTExecutor(int size) : data(size) {}
+	FFTExecutor(std::uint_fast32_t size) : N(size), weight{ init_weight(size) }, rindexes{ init_rindexes(size) }, han_windows{ init_windows(size) } {}
 
 	/**
 	 * @brief 指定されたデータに対してFFTを行う。
@@ -101,32 +65,125 @@ public:
 	{
 		using namespace std;
 
-		unique_ptr<complex<T>[]> ans = make_unique_for_overwrite<complex<T>[]>(data.N);
-		for (int i = 0; i < data.N; i++) {
-			int ri = data.get_reverce_index(i);
-			T hw = data.get_han_window(ri);
+		unique_ptr<complex<T>[]> ans = make_unique_for_overwrite<complex<T>[]>(N);
+		for (std::uint_fast32_t i = 0; i < N; ++i) {
+			auto ri = rindexes[i];
+			auto hw = han_windows[ri <= N >> 1 ? ri : N - ri];
 			ans[i] = complex<T>(pcm[ri] * hw, 0);
 		}
 
-		for (int stage = 1; stage < data.N; stage <<= 1) {
-			for (int j = 0; j < stage; j++) {
-				complex<T> w = data.get_weight(j, stage);
-				for (int i = 0; i < data.N; i += stage << 1) {
-					complex<T> temp = w * ans[j + i + stage];
-					ans[j + i + stage] = ans[j + i] - temp;
-					ans[j + i] += temp;
-				}
+		std::uint_fast32_t harf = N >> 1;
+		for (std::uint_fast32_t stage = 1; stage < N; stage <<= 1) {
+			std::uint_fast32_t temp = (stage - 1);
+			for (std::uint_fast32_t x = 0; x < harf; ++x)
+			{
+				std::uint_fast32_t i = (~temp & x) << 1;
+				std::uint_fast32_t j = x & temp;
+
+				complex<T> w = weight[j * rindexes[stage]];
+				complex<T> t_ans = w * ans[j + i + stage];
+				ans[j + i + stage] = ans[j + i] - t_ans;
+				ans[j + i] += t_ans;
 			}
 		}
 
-		for (int i = 0; i < data.N; i++) {
+		for (std::uint_fast32_t i = 0; i < (N >> 1); ++i) {
 			result[i] = abs(ans[i]);
 		}
 	}
-
-	/**
-	 * @return FFTのサイズ。
-	 */
-	int size() const { return data.N; }
-
 };
+
+
+
+template <>
+inline void FFTExecutor<float>::FFT(float* pcm, float* result) {
+	using namespace std;
+
+	unique_ptr<complex<float>[]> ans = make_unique_for_overwrite<complex<float>[]>(N);
+	for (std::uint_fast32_t i = 0; i < N; ++i) {
+		auto ri = rindexes[i];
+		auto hw = han_windows[ri <= N >> 1 ? ri : N - ri];
+		ans[i] = complex<float>(pcm[ri] * hw, 0);
+	}
+
+#if true 
+	const std::uint_fast32_t eighth = N >> 3;
+	alignas(32) std::complex<float> temp_w[4];
+	alignas(32) std::complex<float> temp_s[4];
+	std::uint_fast32_t temp_ij[4];
+	for (std::uint_fast32_t stage = 1; stage < N; stage <<= 1) {
+		const std::uint_fast32_t temp = (stage - 1);
+		for (std::uint_fast32_t x = 0; x < eighth; ++x)
+		{
+
+			auto y = x << 2;
+			//#pragma unroll 4
+			for (std::uint_fast32_t n = 0; n < 4; ++n)
+			{
+				const std::uint_fast32_t i = _andn_u32(temp, y) << 1; // (~temp & y) << 1;
+				const std::uint_fast32_t j = y & temp;
+
+				temp_w[n] = weight[j * rindexes[stage]];
+				temp_s[n] = ans[i + j + stage];
+				temp_ij[n] = i + j;
+				++y;
+			}
+
+			__m256 temp256 = _mm256_load_ps(reinterpret_cast<float*>(temp_w));
+
+			__m256 f1 = _mm256_moveldup_ps(temp256);
+			__m256 f2 = _mm256_loadu_ps(reinterpret_cast<float*>(temp_s));
+			__m256 f3 = _mm256_movehdup_ps(temp256);
+			__m256 f4 = _mm256_permute_ps(f2, _MM_SHUFFLE(2, 3, 0, 1));
+			__m256 res256 = _mm256_fmaddsub_ps(f1, f2, _mm256_mul_ps(f3, f4));
+
+			_mm256_store_ps(reinterpret_cast<float*>(temp_s), res256);
+
+			//#pragma unroll 4
+			for (std::uint_fast32_t n = 0; n < 4; ++n) {
+				ans[temp_ij[n] + stage] = ans[temp_ij[n]] - temp_s[n];
+				ans[temp_ij[n]] += temp_s[n];
+			}
+		}
+	}
+#else 
+	const std::uint_fast32_t quarter = N >> 2;
+	for (std::uint_fast32_t stage = 1; stage < N; stage <<= 1) {
+		const std::uint_fast32_t temp = (stage - 1);
+		for (std::uint_fast32_t x = 0; x < quarter; ++x)
+		{
+			std::uint_fast32_t y = x << 1;
+			const std::uint_fast32_t i1 = _andn_u32(temp, y) << 1; // (~temp & y) << 1;
+			const std::uint_fast32_t j1 = y & temp;
+			++y;
+			const std::uint_fast32_t i2 = _andn_u32(temp, y) << 1;
+			const std::uint_fast32_t j2 = y & temp;
+
+			complex<float> w1 = weight[j1 * rindexes[stage]];
+			complex<float> w2 = weight[j2 * rindexes[stage]];
+			alignas(32) std::complex<float> temp[2] = { w1, w2 }; // 配列に直接 { weight[略], weight[略] }としようとしたら速度が2倍になった。要検証(g++-13 -std=c++20 -mavx2 -mfma -mbmi -mbmi2 -O2)
+			complex<float> s1 = ans[j1 + i1 + stage];
+			complex<float> s2 = ans[j2 + i2 + stage];
+
+			__m128 temp128 = _mm_load_ps(reinterpret_cast<float*>(temp));
+
+			alignas(32) complex<float> tc[2] = { s1, s2 };
+			__m128 f1 = _mm_moveldup_ps(temp128);
+			__m128 f2 = _mm_load_ps(reinterpret_cast<float*>(tc));
+			__m128 f3 = _mm_movehdup_ps(temp128);
+			__m128 f4 = _mm_permute_ps(f2, _MM_SHUFFLE(2, 3, 0, 1));
+			__m128 result = _mm_fmaddsub_ps(f1, f2, _mm_mul_ps(f3, f4));
+
+			_mm_store_ps(reinterpret_cast<float*>(tc), result);
+
+			ans[j1 + i1 + stage] = ans[j1 + i1] - tc[0];
+			ans[j1 + i1] += tc[0];
+			ans[j2 + i2 + stage] = ans[j2 + i2] - tc[1];
+			ans[j2 + i2] += tc[1];
+		}
+	}
+#endif
+	for (std::uint_fast32_t i = 0; i < (N >> 1); ++i) {
+		result[i] = abs(ans[i]);
+	}
+}

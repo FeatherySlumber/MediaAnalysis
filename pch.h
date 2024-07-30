@@ -41,3 +41,7 @@
 #include <atomic>
 #include <semaphore>
 #include <mutex>
+
+/* ターゲットによる */
+#include <immintrin.h>
+#include <ammintrin.h>

@@ -100,7 +100,7 @@ int wmain(int argc, wchar_t* argv[])
 
     // ファイル取得
 #if true // test
-    StorageFile r = getCurrentStorageFolder().get().GetFileAsync(L"test.mp3").get();
+    StorageFile r = getCurrentStorageFolder().get().GetFileAsync(L"120.mp3").get();
 #else
     // ファイルが指定されなければエラー
     StorageFile r{ nullptr };
@@ -232,7 +232,7 @@ winrt::Windows::Foundation::IAsyncAction FFTAndBPMOutput(const winrt::Windows::S
         for (uint32_t i = 0; i < capacity; ++i) {
             volume_mem.write(pcm[i]);
         }
-        printChangeTimeSpan(ts);  // 処理進捗の表示
+        // printChangeTimeSpan(ts);  // 処理進捗の表示
         }, bpm_aep);
     /****** BPMと音量を出力する準備 ここまで *******/
 #pragma endregion

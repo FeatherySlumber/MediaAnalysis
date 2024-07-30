@@ -12,7 +12,7 @@ class TempoCheck
 		for (int n = N - 1; n > 0; --n) {
 			auto temp = volume[n] - volume[n - 1];
 			if (temp > 0) {
-				volume[n] = temp;
+				volume[n] = temp * get_han_window(n);
 			}
 			else {
 				volume[n] = 0;
@@ -39,15 +39,14 @@ public:
 		T b_result = 0;
 		T b_slope = 0;
 		for (uint32_t i = lower; i < upper; ++i) {
-			T sum1 = 0, sum2 = 0;
+			std::complex<T> sum = 0;
 			T b = T(i) / lower;
+			T temp = T(-2.0) * std::numbers::pi_v<T> * b / frame_sample_rate;
 			for (uint32_t n = 0; n < N; ++n) {
-				sum1 += volume[n] * std::cos(T(2.0) * std::numbers::pi_v<T> * b * n / frame_sample_rate) * get_han_window(n);
-				sum2 += volume[n] * std::sin(T(2.0) * std::numbers::pi_v<T> * b * n / frame_sample_rate) * get_han_window(n);
+			 	if (volume[n] == 0) continue;
+				sum += volume[n] * std::polar(T(1.0), temp * n);
 			}
-			T avg1 = sum1 / N;
-			T avg2 = sum2 / N;
-			T result = std::sqrt((avg1 * avg1) + (avg2 * avg2));
+			T result = std::abs(sum);
 
 			T slope = result - b_result;
 			if (b_slope > 0 && slope <= 0) {
